@@ -33,6 +33,24 @@ cd RT4-Client
 ./gradlew run
 ```
 
+### Build a shareable client
+
+From the RT4 client root, build the self-contained ZIP with Java 11 on Windows:
+
+```powershell
+$env:JAVA_HOME = 'C:\Path\To\Java11'
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+.\gradlew.bat assembleShareable
+```
+
+The artifact is written to `client/build/distributions/2009scape-client-1.0.0.zip`.
+It contains the executable JAR, the compiled plugins, `config.example.json`, and
+`run-client.bat`/`run-client.sh` launchers. The first launch copies the example
+configuration to `config.json`; edit that file with the server hostname and ports.
+
+The bundle includes the `BasicInputQOL` plugin, which provides middle-button camera
+dragging and mouse-wheel zoom without requiring Shift.
+
 You will be connected to a test server automatically.  
 This server is provided by 2009scape for their own internal developments.
 

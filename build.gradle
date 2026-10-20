@@ -1,0 +1,5 @@
+tasks.register("assembleShareable") {
+    dependsOn ":client:assembleShareable"
+    group = "distribution"
+    description = "Build the shareable 2009Scape client ZIP."
+}

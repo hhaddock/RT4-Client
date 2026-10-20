@@ -49,3 +49,30 @@ jar {
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
+
+def shareableClientName = "2009scape-client-${project.version}"
+
+tasks.register("shareableClient", Zip) {
+    dependsOn jar, ":plugin-playground:buildPlugins"
+
+    archiveFileName = "${shareableClientName}.zip"
+    destinationDirectory = layout.buildDirectory.dir("distributions")
+
+    from(jar) {
+        rename { "2009scape-client.jar" }
+    }
+
+    from("config.example.json")
+
+    from("build/generated-plugins") {
+        into "plugins"
+    }
+
+    from("packaging")
+}
+
+tasks.register("assembleShareable") {
+    dependsOn "shareableClient"
+    group = "distribution"
+    description = "Build the shareable 2009Scape client ZIP."
+}

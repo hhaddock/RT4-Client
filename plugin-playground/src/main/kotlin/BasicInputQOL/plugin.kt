@@ -3,7 +3,6 @@ package BasicInputQOL
 import plugin.Plugin
 import plugin.annotations.PluginMeta
 import plugin.api.*
-import rt4.Keyboard
 import java.awt.event.*
 import javax.swing.SwingUtilities
 
@@ -63,12 +62,10 @@ class plugin : Plugin() {
     object MouseWheelCallbacks : MouseWheelListener {
         override fun mouseWheelMoved(e: MouseWheelEvent?) {
             e ?: return
-            if (API.IsKeyPressed(Keyboard.KEY_SHIFT)) {
-                val previous = API.GetPreviousMouseWheelRotation()
-                val current = API.GetMouseWheelRotation()
-                val diff = current - previous
-                API.UpdateCameraZoom(diff)
-            }
+            val previous = API.GetPreviousMouseWheelRotation()
+            val current = API.GetMouseWheelRotation()
+            val diff = current - previous
+            API.UpdateCameraZoom(diff)
         }
     }
 
