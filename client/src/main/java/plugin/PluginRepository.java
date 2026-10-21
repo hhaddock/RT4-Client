@@ -51,14 +51,14 @@ public class PluginRepository {
     }
 
     public static void Init() {
-        File pluginsDirectory = new File(GlobalJsonConfig.instance.pluginsFolder);
+        File pluginsDirectory = GlobalJsonConfig.instance.resolvePath(GlobalJsonConfig.instance.pluginsFolder);
 
         if (!pluginsDirectory.exists()) {
             System.out.println("Skipping plugin initialization - " + pluginsDirectory.getAbsolutePath() + " does not exist.");
             return;
         }
 
-        File pluginStorage = new File(GlobalJsonConfig.instance.pluginsFolder + File.separator + "plsto");
+        File pluginStorage = new File(pluginsDirectory, "plsto");
         if (pluginStorage.exists()) {
            try (FileInputStream fis = new FileInputStream(pluginStorage)) {
                ObjectInputStream ois = new ObjectInputStream(fis);
@@ -68,7 +68,7 @@ public class PluginRepository {
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try(FileOutputStream fos = new FileOutputStream(GlobalJsonConfig.instance.pluginsFolder + File.separator + "plsto")) {
+            try(FileOutputStream fos = new FileOutputStream(new File(pluginsDirectory, "plsto"))) {
                 ObjectOutputStream oos = new ObjectOutputStream(fos);
                 oos.writeObject(PluginRepository.pluginStorage);
                 oos.close();

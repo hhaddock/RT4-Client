@@ -5,4 +5,5 @@
 bin/
 build/
 dump/
+cache/
 client/plugins/

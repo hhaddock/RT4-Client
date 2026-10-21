@@ -52,6 +52,20 @@ jar {
 
 def shareableClientName = "2009scape-client-${project.version}"
 
+def clientConfigFile() {
+    def configuredConfig = project.findProperty("clientConfig")
+    if (configuredConfig != null) {
+        def file = project.file(configuredConfig)
+        if (!file.isFile()) {
+            throw new GradleException("Client config was not found at ${file}.")
+        }
+        return file
+    }
+
+    def localConfig = project.file("config.json")
+    return localConfig.isFile() ? localConfig : project.file("config.example.json")
+}
+
 tasks.register("shareableClient", Zip) {
     dependsOn jar, ":plugin-playground:buildPlugins"
 
@@ -60,6 +74,10 @@ tasks.register("shareableClient", Zip) {
 
     from(jar) {
         rename { "2009scape-client.jar" }
+    }
+
+    from(clientConfigFile()) {
+        rename { "config.json" }
     }
 
     from("config.example.json")
@@ -75,4 +93,145 @@ tasks.register("assembleShareable") {
     dependsOn "shareableClient"
     group = "distribution"
     description = "Build the shareable 2009Scape client ZIP."
+}
+
+def jpackagePlatformIcon() {
+    def configuredIcon = project.findProperty("jpackageIcon")
+    if (configuredIcon != null) {
+        return project.file(configuredIcon)
+    }
+
+    def iconName
+    if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+        iconName = "2009scape.ico"
+    } else if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
+        iconName = "2009scape.icns"
+    } else {
+        iconName = "2009scape.png"
+    }
+
+    return project.file("packaging/icons/${iconName}")
+}
+
+def javaTool(File javaHome, String tool) {
+    def executable = org.gradle.internal.os.OperatingSystem.current().isWindows() ? "${tool}.exe" : tool
+    return new File(javaHome, "bin/${executable}")
+}
+
+tasks.register("jpackageInput", Sync) {
+    dependsOn jar, ":plugin-playground:buildPlugins"
+
+    into layout.buildDirectory.dir("jpackage/input")
+
+    from(jar) {
+        rename { "2009scape-client.jar" }
+    }
+
+    from(clientConfigFile()) {
+        rename { "config.json" }
+    }
+
+    from("build/generated-plugins") {
+        into "plugins"
+    }
+}
+
+tasks.register("jpackageRuntime") {
+    group = "distribution"
+    description = "Build the Java runtime image bundled into the native installer."
+
+    doLast {
+        def runtimeJavaHome = project.findProperty("runtimeJavaHome") ?: System.getenv("RUNTIME_JAVA_HOME") ?: System.getenv("JAVA_HOME")
+        if (runtimeJavaHome == null) {
+            throw new GradleException("Set RUNTIME_JAVA_HOME or -PruntimeJavaHome to a Java 11 home.")
+        }
+
+        def jlink = javaTool(project.file(runtimeJavaHome), "jlink")
+        if (!jlink.isFile()) {
+            throw new GradleException("jlink was not found at ${jlink}. Set RUNTIME_JAVA_HOME to a JDK, not a JRE.")
+        }
+
+        def runtimeImage = layout.buildDirectory.dir("jpackage/runtime").get().asFile
+        project.delete(runtimeImage)
+        project.exec {
+            commandLine jlink.absolutePath,
+                    "--add-modules", "java.se,jdk.unsupported",
+                    "--strip-debug",
+                    "--no-header-files",
+                    "--no-man-pages",
+                    "--compress=2",
+                    "--output", runtimeImage.absolutePath
+        }
+    }
+}
+
+tasks.register("jpackage") {
+    dependsOn "jpackageInput", "jpackageRuntime"
+    group = "distribution"
+    description = "Build a native installer or app image with a bundled Java runtime."
+
+    doLast {
+        def packagingJavaHome = project.findProperty("jpackageJavaHome") ?: System.getenv("JPACKAGE_JAVA_HOME") ?: System.getenv("JAVA_HOME")
+        if (packagingJavaHome == null) {
+            throw new GradleException("Set JPACKAGE_JAVA_HOME or -PjpackageJavaHome to a JDK containing jpackage.")
+        }
+
+        def jpackage = javaTool(project.file(packagingJavaHome), "jpackage")
+        if (!jpackage.isFile()) {
+            throw new GradleException("jpackage was not found at ${jpackage}. Use a JDK 14+ home for packaging.")
+        }
+
+        def type = project.findProperty("jpackageType") ?: "app-image"
+        def inputDir = layout.buildDirectory.dir("jpackage/input").get().asFile
+        def runtimeImage = layout.buildDirectory.dir("jpackage/runtime").get().asFile
+        def outputDir = layout.buildDirectory.dir("jpackage/installers").get().asFile
+        project.delete(outputDir)
+        outputDir.mkdirs()
+
+        def args = [
+                jpackage.absolutePath,
+                "--type", type,
+                "--input", inputDir.absolutePath,
+                "--dest", outputDir.absolutePath,
+                "--name", "2009Scape",
+                "--app-version", project.version.toString(),
+                "--main-jar", "2009scape-client.jar",
+                "--main-class", mainClassName,
+                "--runtime-image", runtimeImage.absolutePath,
+                "--vendor", "2009Scape Homelab",
+                "--description", "A private 2009Scape client",
+                "--copyright", "AGPL-3.0"
+        ]
+
+        def icon = jpackagePlatformIcon()
+        if (icon.isFile()) {
+            args += ["--icon", icon.absolutePath]
+        } else {
+            logger.lifecycle("No platform icon found at ${icon}; jpackage will use its default icon.")
+        }
+
+        def operatingSystem = org.gradle.internal.os.OperatingSystem.current()
+        if (operatingSystem.isWindows() && project.findProperty("jpackageConsole") == "true") {
+            args += ["--win-console"]
+        }
+        if (type != "app-image" && operatingSystem.isWindows()) {
+            args += ["--win-menu", "--win-shortcut", "--win-dir-chooser", "--win-menu-group", "2009Scape"]
+        } else if (type != "app-image" && operatingSystem.isLinux()) {
+            args += ["--linux-shortcut", "--linux-menu-group", "Games"]
+        } else if (type != "app-image" && operatingSystem.isMacOsX()) {
+            args += ["--mac-package-name", "2009Scape", "--mac-app-category", "public.app-category.games"]
+        }
+
+        project.exec {
+            commandLine args
+        }
+
+        logger.lifecycle("Native package written to ${outputDir}")
+    }
+}
+
+tasks.register("assembleInstaller") {
+    dependsOn "jpackage"
+    group = "distribution"
+    description = "Build the native 2009Scape installer/app image."
 }
